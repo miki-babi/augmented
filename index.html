@@ -28,7 +28,13 @@
         document.body.appendChild(renderer.domElement);
 
         // Add AR button
-        document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+        try {
+            document.body.appendChild(
+                ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] })
+            );
+        } catch (error) {
+            alert(`AR button creation failed: ${error.message}`);
+        }
 
         // Lighting
         const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
@@ -43,33 +49,43 @@
         scene.add(cube);
 
         let xrHitTestSource = null;
-        let hitTestSourceInitialized = false;
 
         // Handle AR session
         renderer.xr.addEventListener('sessionstart', async () => {
-            const session = renderer.xr.getSession();
-            const viewerSpace = await session.requestReferenceSpace('viewer');
-            xrHitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+            try {
+                const session = renderer.xr.getSession();
+                const viewerSpace = await session.requestReferenceSpace('viewer');
+                xrHitTestSource = await session.requestHitTestSource({ space: viewerSpace });
 
-            session.addEventListener('end', () => {
-                xrHitTestSource = null;
-                hitTestSourceInitialized = false;
-            });
+                session.addEventListener('end', () => {
+                    xrHitTestSource = null;
+                });
+            } catch (error) {
+                alert(`Session start failed: ${error.message}`);
+            }
         });
 
         // Render loop
         renderer.setAnimationLoop((timestamp, frame) => {
             if (frame && xrHitTestSource) {
-                const referenceSpace = renderer.xr.getReferenceSpace();
-                const hitTestResults = frame.getHitTestResults(xrHitTestSource);
+                try {
+                    const referenceSpace = renderer.xr.getReferenceSpace();
+                    const hitTestResults = frame.getHitTestResults(xrHitTestSource);
 
-                if (hitTestResults.length > 0) {
-                    const hit = hitTestResults[0];
-                    const pose = hit.getPose(referenceSpace);
+                    if (hitTestResults.length > 0) {
+                        const hit = hitTestResults[0];
+                        const pose = hit.getPose(referenceSpace);
 
-                    // Place the cube at the detected hit position
-                    cube.visible = true;
-                    cube.position.set(pose.transform.position.x, pose.transform.position.y, pose.transform.position.z);
+                        // Place the cube at the detected hit position
+                        cube.visible = true;
+                        cube.position.set(
+                            pose.transform.position.x,
+                            pose.transform.position.y,
+                            pose.transform.position.z
+                        );
+                    }
+                } catch (error) {
+                    alert(`Hit test error: ${error.message}`);
                 }
             }
 
