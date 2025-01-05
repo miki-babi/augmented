@@ -3,58 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Hit Test</title>
-    <!-- Include A-Frame and AR.js -->
-    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/jeromeetienne/ar.js/aframe/build/aframe-ar.min.js"></script>
+    <title>WebXR AR Hit Test</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
 </head>
-<body style="margin: 0; overflow: hidden;">
-    <a-scene
-        vr-mode-ui="enabled: false;"
-        arjs="sourceType: webcam; debugUIEnabled: false;">
-        <!-- Cube to place -->
-        <a-box 
-            id="cube" 
-            position="0 0 -5" 
-            rotation="0 45 0" 
-            color="#4CC3D9" 
-            scale="0.5 0.5 0.5" 
-            visible="false">
-        </a-box>
+<body>
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.module.js';
+        import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.153.0/examples/jsm/webxr/ARButton.js';
 
-        <!-- AR Hit Test for placement -->
-        <a-entity 
-            id="hit-test" 
-            geometry="primitive: ring; radiusInner: 0.05; radiusOuter: 0.1"
-            material="color: yellow; shader: flat;" 
-            position="0 0 -2" 
-            visible="false">
-        </a-entity>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera();
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.xr.enabled = true;
+        document.body.appendChild(renderer.domElement);
 
-        <a-camera position="0 1.6 0" look-controls></a-camera>
-    </a-scene>
+        // Add AR button
+        document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
 
-    <script>
-        // Wait for the scene to load
-        document.querySelector('a-scene').addEventListener('loaded', () => {
-            const hitTestEntity = document.getElementById('hit-test');
-            const cubeEntity = document.getElementById('cube');
+        // Lighting
+        const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+        light.position.set(0.5, 1, 0.25);
+        scene.add(light);
 
-            // Make the hit-test entity visible when clicking on the screen
-            window.addEventListener('click', (event) => {
-                if (hitTestEntity.getAttribute('visible')) {
-                    const position = hitTestEntity.getAttribute('position');
-                    cubeEntity.setAttribute('position', position);
-                    cubeEntity.setAttribute('visible', true);
+        // Cube model
+        const cubeGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+        const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0x4CC3D9 });
+        const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+        cube.visible = false; // Start invisible
+        scene.add(cube);
+
+        let xrHitTestSource = null;
+        let hitTestSourceInitialized = false;
+
+        // Handle AR session
+        renderer.xr.addEventListener('sessionstart', async () => {
+            const session = renderer.xr.getSession();
+            const viewerSpace = await session.requestReferenceSpace('viewer');
+            xrHitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+
+            session.addEventListener('end', () => {
+                xrHitTestSource = null;
+                hitTestSourceInitialized = false;
+            });
+        });
+
+        // Render loop
+        renderer.setAnimationLoop((timestamp, frame) => {
+            if (frame && xrHitTestSource) {
+                const referenceSpace = renderer.xr.getReferenceSpace();
+                const hitTestResults = frame.getHitTestResults(xrHitTestSource);
+
+                if (hitTestResults.length > 0) {
+                    const hit = hitTestResults[0];
+                    const pose = hit.getPose(referenceSpace);
+
+                    // Place the cube at the detected hit position
+                    cube.visible = true;
+                    cube.position.set(pose.transform.position.x, pose.transform.position.y, pose.transform.position.z);
                 }
-            });
+            }
 
-            // Update hit-test position and visibility
-            document.addEventListener('touchstart', (event) => {
-                // Simulate hit-test success for simplicity
-                hitTestEntity.setAttribute('position', '0 0 -2'); // Update this logic for real hit testing
-                hitTestEntity.setAttribute('visible', true);
-            });
+            renderer.render(scene, camera);
         });
     </script>
 </body>
